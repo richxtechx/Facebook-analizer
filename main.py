@@ -1243,7 +1243,7 @@ async def build_response(fuente, consulta, comments, modo, result, user, videos=
     )
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     return {
         "status": "ok", "modelo": GEMINI_MODEL,
@@ -1311,6 +1311,27 @@ async def enviar_feedback(req: FeedbackRequest, user: str = Depends(require_user
     else:
         logger.info("Feedback de %s: %s %s", user, req.util, req.texto[:200])
     return {"ok": True}
+
+
+@app.get("/systeme/tags")
+async def systeme_tags(request: Request):
+    """Lista tus tags de systeme.io con su id, para copiar el correcto."""
+    user = current_user(request)
+    if not user or is_guest(user):
+        raise HTTPException(status_code=401, detail="Necesitas entrar con tu cuenta.")
+    if not SYSTEME_API_KEY:
+        raise HTTPException(status_code=400, detail="Falta SYSTEME_API_KEY.")
+    headers = {"X-API-Key": SYSTEME_API_KEY}
+    async with httpx.AsyncClient(timeout=20, headers=headers) as client:
+        resp = await client.get(f"{SYSTEME_API}/tags", params={"limit": 100})
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"systeme.io respondió {resp.status_code}: {resp.text[:200]}")
+        items = resp.json().get("items", [])
+    return {
+        "configurado_ahora": SYSTEME_TAG_ID,
+        "total": len(items),
+        "tags": [{"id": t.get("id"), "nombre": t.get("name")} for t in items],
+    }
 
 
 @app.get("/systeme/test")
